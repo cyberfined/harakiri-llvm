@@ -1,0 +1,3 @@
+[submodule "harakiri-lib"]
+	path = harakiri-lib
+	url = https://github.com/cyberfined/harakiri-lib

@@ -42,20 +42,24 @@ executable harakiri-llvm
       main
   main-is:
       Main.hs
+  other-modules:
+      OptionsParser
   ghc-options:
       -Wall
   default-extensions:
       OverloadedStrings
     , LambdaCase
   build-depends:
-      base           >= 4.7  && < 5
-    , bytestring     >= 0.10 && < 1
-    , containers     >= 0.5  && < 1
-    , harakiri-lib   >= 0.1  && < 1
-    , harakiri-llvm  >= 0.1  && < 1
-    , llvm-hs        >= 12   && < 12.1
-    , llvm-hs-pure   >= 12   && < 12.1
-    , mtl            >= 2.2  && < 3
-    , text           >= 1.2  && < 2
+      base                 >= 4.7  && < 5
+    , bytestring           >= 0.10 && < 1
+    , containers           >= 0.5  && < 1
+    , filepath             >= 1.4  && < 2
+    , harakiri-lib         >= 0.1  && < 1
+    , harakiri-llvm        >= 0.1  && < 1
+    , llvm-hs              >= 12   && < 12.1
+    , llvm-hs-pure         >= 12   && < 12.1
+    , mtl                  >= 2.2  && < 3
+    , optparse-applicative >= 0.16 && < 1
+    , text                 >= 1.2  && < 2
   default-language:
       Haskell2010

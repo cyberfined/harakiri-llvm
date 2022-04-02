@@ -1,5 +1,10 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Main (main) where
 
+import Control.Exception          (bracket, catch)
+import Control.Monad              (when, void)
+import Data.Maybe                 (fromMaybe)
 import Data.Text                  (Text)
 import Harakiri.Compiler.LLVM
 import Harakiri.Expr       hiding (showFunction, interpret)
@@ -7,59 +12,83 @@ import Harakiri.IR         hiding (showFunction)
 import Harakiri.Parser
 import Harakiri.SourceCode
 import Harakiri.TypeCheck
+import LLVM.AST                   (Module(..))
 import LLVM.Context               (Context, withContext)
-import LLVM.Module                (withModuleFromAST, moduleLLVMAssembly)
+import LLVM.Module                ( File(..), writeObjectToFile, withModuleFromAST
+                                  , moduleLLVMAssembly
+                                  )
 import LLVM.PassManager           ( PassSetSpec(..), withPassManager, runPassManager
                                   , defaultCuratedPassSetSpec
                                   )
-import System.IO                  (stderr)
+import LLVM.Target                (TargetMachine)
+import System.IO                  (stderr, openFile, hClose, IOMode(..))
 import System.Exit
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.Text.IO  as TIO
-import qualified Harakiri.Expr as Expr
-import qualified Harakiri.IR   as IR
+import OptionsParser
 
-import Foreign.Ptr
-import Control.Monad (void)
-import LLVM.AST (Module(..))
-import LLVM.ExecutionEngine (MCJIT, withModuleInEngine, withMCJIT, getFunction)
-
-
-{-
-import qualified LLVM.Relocation as Reloc
-import qualified LLVM.CodeModel as CodeModel
-import qualified LLVM.CodeGenOpt as CodeGenOpt
-import qualified LLVM.AST.DataLayout as Layout
-import LLVM.Target
-
-withHostTargetMachine Reloc.Default CodeModel.Default CodeGenOpt.Default $ \tm -> do
-    layout <- getTargetMachineDataLayout tm
-    print $ Layout.nativeSizes layout
--}
-
-foreign import ccall "dynamic" llvmFun :: FunPtr (IO ()) -> (IO ())
+import qualified Data.Map              as Map
+import qualified Data.Set              as Set
+import qualified Data.Text.IO          as TIO
+import qualified Harakiri.Expr         as Expr
+import qualified Harakiri.IR           as IR
+import qualified LLVM.CodeModel        as CodeModel
+import qualified LLVM.CodeGenOpt       as CodeGenOpt
+import qualified LLVM.Exception        as LLVM
+import qualified LLVM.Target           as LLVM
+import qualified LLVM.Relocation       as Reloc
+import qualified LLVM.AST.DataLayout   as Layout
 
 main :: IO ()
 main = do
-    sourceCode <- SourceCode <$> TIO.readFile inputFile
-    annFuncs <- rightOrPrintError (parseFromText inputFile sourceCode)
+    opts <- parseOptions
+    when (showVersion opts) printVersion
+
+    sourceCode <- SourceCode <$> TIO.readFile (inputFile opts)
+    annFuncs <- rightOrPrintError (parseFromText (inputFile opts) sourceCode)
     typedFuncs <- rightOrPrintError (typeCheck sourceCode annFuncs)
     let strippedFuncs = map (fmap stripAnnotation) $ getTypedFunctions typedFuncs
-    mapM_ (TIO.putStrLn . Expr.showFunction) strippedFuncs
+    when (dumpAST opts) $
+        dumpToFile (astDumpPath opts) Expr.showFunction strippedFuncs
 
     transRes <- rightOrPrintError (translateToIR typedFuncs)
-    mapM_ (TIO.putStrLn . IR.showFunction) $ IR.functions transRes
-    astModule <- rightOrPrintError (translateToLLVM (CompileParams 64) transRes)
+    when (dumpIR opts) $
+        dumpToFile (irDumpPath opts) IR.showFunction (IR.functions transRes)
 
-    runJIT astModule
+    withTargetMachine opts $ \case
+        Nothing -> die "Can't lookup target to compile"
+        Just targetMachine -> do
+            layout <- LLVM.getTargetMachineDataLayout targetMachine
+            let integerSize = case Layout.nativeSizes layout of
+                    Nothing    -> 8
+                    Just sizes -> fromMaybe 8 $ Set.lookupMax sizes
+                params = CompileParams integerSize
+            astModule <- rightOrPrintError (translateToLLVM params transRes)
+            compileToObj opts targetMachine astModule
+
     {-
     withContext $ \context ->
         withModuleFromAST context astModule $ \llvmModule ->
             moduleLLVMAssembly llvmModule >>= BS.putStrLn
     -}
 
-  where inputFile = "test.hk"
+withTargetMachine :: Options -> (Maybe TargetMachine -> IO a) -> IO a
+withTargetMachine opts fn = do
+    LLVM.initializeAllTargets
+    catch (withFunction $ fn . Just) $ \(e :: LLVM.LookupTargetException) -> fn Nothing
+  where withFunction :: (TargetMachine -> IO a) -> IO a
+        withFunction fn' = case targetTriple opts of
+            Nothing -> LLVM.withHostTargetMachine Reloc.PIC CodeModel.Default
+                CodeGenOpt.Default fn'
+            Just triple -> do
+                (target, foundTriple) <- LLVM.lookupTarget Nothing triple
+                LLVM.withTargetOptions $ \targetOpts -> 
+                    LLVM.withTargetMachine target foundTriple "generic" Map.empty
+                        targetOpts Reloc.PIC CodeModel.Default CodeGenOpt.Default fn'
+
+printVersion :: IO ()
+printVersion = do
+    putStrLn "harakiri-llvm version 0.1.0.0"
+    exitWith (ExitFailure 2)
 
 rightOrPrintError :: Either Text a -> IO a
 rightOrPrintError e = case e of
@@ -68,23 +97,16 @@ rightOrPrintError e = case e of
         exitWith (ExitFailure 2)
     Right val -> return val
 
-mcjit :: Context -> (MCJIT -> IO a) -> IO a
-mcjit ctx = withMCJIT ctx (Just 0) Nothing Nothing Nothing
+dumpToFile :: FilePath -> (a -> Text) -> [a] -> IO ()
+dumpToFile fp showItem items = bracket (openFile fp WriteMode) hClose $ \hdl ->
+    mapM_ (TIO.hPutStrLn hdl . showItem) items
 
-runJitFn :: FunPtr a -> IO ()
-runJitFn fn = llvmFun (castFunPtr fn :: FunPtr (IO ()))
-
-runJIT :: Module -> IO ()
-runJIT mod =
+compileToObj :: Options -> TargetMachine -> Module -> IO ()
+compileToObj opts targetMachine astMod =
     withContext $ \context ->
-        withModuleFromAST context mod $ \m -> do
+        withModuleFromAST context astMod $ \binMod -> do
             withPassManager passes $ \passMgr -> do
-                void $ runPassManager passMgr m
-                s <- moduleLLVMAssembly m
-                BS.putStrLn s
-                mcjit context $ \engine ->
-                    withModuleInEngine engine m $ \em ->
-                        getFunction em "main" >>= \case
-                            Nothing     -> pure ()
-                            Just mainFn -> void $ runJitFn mainFn
+                void $ runPassManager passMgr binMod
+                writeObjectToFile targetMachine file binMod
   where passes = defaultCuratedPassSetSpec { optLevel = Just 3 }
+        file = File (outputFile opts)

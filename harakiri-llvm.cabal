@@ -17,12 +17,45 @@ source-repository head
   type:     git
   location: https://github.com/cyberfined/harakiri-llvm
 
+library
+  exposed-modules:
+      Harakiri.Compiler.LLVM
+  hs-source-dirs:
+      src
+  ghc-options:
+      -Wall
+  default-extensions:
+      OverloadedStrings
+    , LambdaCase
+  build-depends:
+      base                 >= 4.7  && < 5
+    , bytestring           >= 0.10 && < 1
+    , containers           >= 0.5  && < 1
+    , harakiri-lib         >= 0.1  && < 1
+    , llvm-hs-pure         >= 12   && < 12.1
+    , mtl                  >= 2.2  && < 3
+    , text                 >= 1.2  && < 2
+    , unordered-containers >= 0.2  && < 1
+
 executable harakiri-llvm
-  hs-source-dirs:      main
-  main-is:             Main.hs
-  ghc-options:         -Wall
-  default-language:    Haskell2010
-  build-depends:       base         >= 4.7 && < 5,
-                       llvm-hs-pure >= 12  && < 12.1,
-                       llvm-hs      >= 12  && < 12.1,
-                       harakiri-lib >= 0.1 && < 1
+  hs-source-dirs:
+      main
+  main-is:
+      Main.hs
+  ghc-options:
+      -Wall
+  default-extensions:
+      OverloadedStrings
+    , LambdaCase
+  build-depends:
+      base           >= 4.7  && < 5
+    , bytestring     >= 0.10 && < 1
+    , containers     >= 0.5  && < 1
+    , harakiri-lib   >= 0.1  && < 1
+    , harakiri-llvm  >= 0.1  && < 1
+    , llvm-hs        >= 12   && < 12.1
+    , llvm-hs-pure   >= 12   && < 12.1
+    , mtl            >= 2.2  && < 3
+    , text           >= 1.2  && < 2
+  default-language:
+      Haskell2010

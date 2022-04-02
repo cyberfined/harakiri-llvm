@@ -1,0 +1,28 @@
+cabal-version:       2.2
+name:                harakiri-llvm
+version:             0.1.0.0
+synopsis:            LLVM frontend for harakiri language
+description:         LLVM frontend for harakiri language
+homepage:            https://github.com/cyberfined/harakiri-llvm
+license:             WTFPL
+license-file:        LICENSE
+author:              cyberfined
+maintainer:          cyberfined@protonmail.com
+copyright:           Copyright (c) 2022 cyberfined
+category:            Compilers
+build-type:          Simple
+extra-source-files:  README.md
+
+source-repository head
+  type:     git
+  location: https://github.com/cyberfined/harakiri-llvm
+
+executable harakiri-llvm
+  hs-source-dirs:      main
+  main-is:             Main.hs
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+  build-depends:       base         >= 4.7 && < 5,
+                       llvm-hs-pure >= 12  && < 12.1,
+                       llvm-hs      >= 12  && < 12.1,
+                       harakiri-lib >= 0.1 && < 1

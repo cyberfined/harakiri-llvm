@@ -1,0 +1,10 @@
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/1.yaml
+
+packages:
+- .
+
+extra-deps:
+  - harakiri-lib
+  - llvm-hs/llvm-hs
+  - llvm-hs/llvm-hs-pure

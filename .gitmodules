@@ -1,0 +1,6 @@
+[submodule "harakiri-lib"]
+	path = harakiri-lib
+	url = https://github.com/cyberfined/harakiri-lib.git
+[submodule "llvm-hs"]
+	path = llvm-hs
+	url = https://github.com/llvm-hs/llvm-hs.git

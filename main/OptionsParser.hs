@@ -4,6 +4,7 @@ module OptionsParser
     , astDumpPath
     , irDumpPath
     , llvmDumpPath
+    , objectFilePath
     ) where
 
 import Control.Monad         (when)
@@ -17,6 +18,7 @@ data Options = Options
     , dumpAST      :: !Bool
     , dumpIR       :: !Bool
     , dumpLLVM     :: !Bool
+    , clangPath    :: !(Maybe FilePath)
     , targetTriple :: !(Maybe ShortByteString)
     , inputFile    :: !FilePath
     , outputFile   :: !FilePath
@@ -56,8 +58,12 @@ options =  Options
           <> help "Dump llvm assembly"
            )
        <*> (optional . strOption)
+           ( long "clang-path"
+          <> metavar "PATH"
+          <> help "Path to clang"
+           )
+       <*> (optional . strOption)
            ( long "target"
-          <> short 't'
           <> metavar "TARGET"
           <> help "Set target"
            )
@@ -83,3 +89,6 @@ irDumpPath opts = dropExtension (inputFile opts) ++ "-ir"
 
 llvmDumpPath :: Options -> FilePath
 llvmDumpPath opts = replaceExtension (inputFile opts) "ll"
+
+objectFilePath :: Options -> FilePath
+objectFilePath opts = replaceExtension (inputFile opts) "o"
